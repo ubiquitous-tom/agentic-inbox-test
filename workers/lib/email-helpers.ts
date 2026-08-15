@@ -44,6 +44,20 @@ export async function listMailboxes(
 	});
 }
 
+/**
+ * Default settings blob written when a mailbox is first provisioned, either
+ * via explicit creation (POST /api/v1/mailboxes) or lazily on first
+ * authorized access (see `requireMailbox`).
+ */
+export function defaultMailboxSettings(fromName: string) {
+	return {
+		fromName,
+		forwarding: { enabled: false, email: "" },
+		signature: { enabled: false, text: "" },
+		autoReply: { enabled: false, subject: "", message: "" },
+	};
+}
+
 // ── Sender Validation ──────────────────────────────────────────────
 
 /**

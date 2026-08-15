@@ -21,6 +21,8 @@ export interface Mailbox {
 	email: string;
 	name: string;
 	settings?: MailboxSettings;
+	/** Present on list responses: the caller's own mailbox vs. a shared team mailbox. */
+	type?: "private" | "shared";
 }
 
 export interface Email {

@@ -5,4 +5,6 @@
 export interface Env extends Cloudflare.Env {
 	POLICY_AUD: string;
 	TEAM_DOMAIN: string;
+	/** Dev-only: simulated authenticated user email, since Access validation is skipped in local dev. */
+	DEV_USER_EMAIL: string;
 }

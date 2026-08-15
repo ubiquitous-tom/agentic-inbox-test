@@ -14,7 +14,10 @@
 		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 		// The worker now fails closed outside local development if Access is not configured.
 		"DOMAINS": "cumuluselements.com",
-		"EMAIL_ADDRESSES": []
+		"EMAIL_ADDRESSES": [],
+		// Shared/team mailbox addresses — every Access-authenticated user can view
+		// these in addition to their own private mailbox (their login email).
+		"SHARED_MAILBOX_ADDRESSES": []
 	},
 	"send_email": [
 		{

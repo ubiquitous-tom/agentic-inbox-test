@@ -13,13 +13,14 @@ import {
 	SenderValidationError,
 	generateMessageId,
 	buildThreadingHeaders,
-	listMailboxes,
+	defaultMailboxSettings,
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
+import { getAuthenticatedUserEmail, IdentityError } from "./lib/identity";
 
 type AppContext = Context<MailboxContext>;
 
@@ -95,8 +96,22 @@ app.get("/api/v1/config", (c) => {
 // -- Mailboxes ------------------------------------------------------
 
 app.get("/api/v1/mailboxes", async (c) => {
-	const allMailboxes = await listMailboxes(c.env.BUCKET);
-	return c.json(allMailboxes.map((m) => ({ ...m, name: m.id })));
+	let userEmail: string;
+	try {
+		userEmail = getAuthenticatedUserEmail(c);
+	} catch (e) {
+		if (e instanceof IdentityError) return c.json({ error: e.message }, 403);
+		throw e;
+	}
+
+	const sharedAddresses = ((c.env.SHARED_MAILBOX_ADDRESSES ?? []) as string[]).map((a) =>
+		a.toLowerCase(),
+	);
+	const mine = { id: userEmail, email: userEmail, name: userEmail.split("@")[0] || userEmail, type: "private" as const };
+	const shared = sharedAddresses
+		.filter((addr) => addr !== userEmail)
+		.map((addr) => ({ id: addr, email: addr, name: addr.split("@")[0] || addr, type: "shared" as const }));
+	return c.json([mine, ...shared]);
 });
 
 app.post("/api/v1/mailboxes", async (c) => {
@@ -108,8 +123,7 @@ app.post("/api/v1/mailboxes", async (c) => {
 	}
 	const key = `mailboxes/${email}.json`;
 	if (await c.env.BUCKET.head(key)) return c.json({ error: "Mailbox already exists" }, 409);
-	const defaultSettings = { fromName: name, forwarding: { enabled: false, email: "" }, signature: { enabled: false, text: "" }, autoReply: { enabled: false, subject: "", message: "" } };
-	const finalSettings = { ...defaultSettings, ...settings };
+	const finalSettings = { ...defaultMailboxSettings(name), ...settings };
 	await c.env.BUCKET.put(key, JSON.stringify(finalSettings));
 	const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(email));
 	await stub.getFolders();

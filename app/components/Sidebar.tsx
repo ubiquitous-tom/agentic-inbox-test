@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Dialog, Input, Tooltip } from "@cloudflare/kumo";
+import { Badge, Button, Dialog, Input, Select, Tooltip } from "@cloudflare/kumo";
 import {
 	ArchiveIcon,
 	CaretLeftIcon,
@@ -18,7 +18,7 @@ import { useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import { Folders, SYSTEM_FOLDER_IDS } from "shared/folders";
 import { useCreateFolder, useFolders } from "~/queries/folders";
-import { useMailbox } from "~/queries/mailboxes";
+import { useMailbox, useMailboxes } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
 
 const FOLDER_ICONS: Record<string, React.ReactNode> = {
@@ -80,6 +80,7 @@ export default function Sidebar() {
 	const createFolderMutation = useCreateFolder();
 	const { startCompose, closeSidebar } = useUIStore();
 	const { data: currentMailbox } = useMailbox(mailboxId);
+	const { data: mailboxes = [] } = useMailboxes();
 	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 	const [newFolderName, setNewFolderName] = useState("");
 
@@ -144,6 +145,28 @@ export default function Sidebar() {
 					</div>
 				</div>
 			</div>
+
+			{/* Switch between private and shared team mailboxes */}
+			{mailboxes.length > 1 && (
+				<div className="px-4 pb-1">
+					<Select
+						aria-label="Switch mailbox"
+						value={mailboxId}
+						onValueChange={(value) => {
+							if (value && value !== mailboxId) {
+								navigate(`/mailbox/${value}`);
+								closeSidebar();
+							}
+						}}
+					>
+						{mailboxes.map((m) => (
+							<Select.Option key={m.id} value={m.id}>
+								{m.type === "private" ? "My Mailbox" : m.name}
+							</Select.Option>
+						))}
+					</Select>
+				</div>
+			)}
 
 			{/* Compose */}
 			<div className="px-3 py-3">
