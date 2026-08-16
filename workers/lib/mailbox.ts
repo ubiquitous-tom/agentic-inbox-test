@@ -13,7 +13,7 @@ import { createMiddleware } from "hono/factory";
 import type { MailboxDO } from "../durableObject";
 import type { Env } from "../types";
 import { getAuthenticatedUserEmail, IdentityError } from "./identity";
-import { defaultMailboxSettings } from "./email-helpers";
+import { defaultMailboxSettings, parseAddressList } from "./email-helpers";
 
 export type MailboxContext = {
 	Bindings: Env;
@@ -35,9 +35,7 @@ export const requireMailbox = createMiddleware<MailboxContext>(async (c, next) =
 		throw e;
 	}
 
-	const sharedAddresses = ((c.env.SHARED_MAILBOX_ADDRESSES ?? []) as string[]).map((a) =>
-		a.toLowerCase(),
-	);
+	const sharedAddresses = parseAddressList(c.env.SHARED_MAILBOX_ADDRESSES);
 	const allowed = mailboxId === userEmail || sharedAddresses.includes(mailboxId);
 	// Respond identically to "mailbox doesn't exist" so unauthorized callers
 	// can't distinguish a real mailbox from a nonexistent one.

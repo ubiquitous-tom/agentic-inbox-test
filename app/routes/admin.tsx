@@ -196,7 +196,7 @@ export default function AdminRoute() {
 						<Input
 							label="Mailbox address"
 							type="email"
-							placeholder="alice@cumuluselements.com"
+							placeholder="alice@example.com"
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 							required

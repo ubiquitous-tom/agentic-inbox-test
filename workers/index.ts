@@ -14,6 +14,7 @@ import {
 	generateMessageId,
 	buildThreadingHeaders,
 	defaultMailboxSettings,
+	parseAddressList,
 	type MailboxSettings,
 } from "./lib/email-helpers";
 import { SendEmailRequestSchema } from "./lib/schemas";
@@ -102,9 +103,8 @@ app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
 // -- Config ---------------------------------------------------------
 
 app.get("/api/v1/config", (c) => {
-	const domainsRaw = c.env.DOMAINS || "";
-	const domains = domainsRaw.split(",").map((d) => d.trim()).filter(Boolean);
-	const emailAddresses = c.env.EMAIL_ADDRESSES ?? [];
+	const domains = parseAddressList(c.env.DOMAINS);
+	const emailAddresses = parseAddressList(c.env.EMAIL_ADDRESSES);
 	return c.json({ domains, emailAddresses });
 });
 
@@ -135,9 +135,7 @@ app.get("/api/v1/mailboxes", async (c) => {
 		throw e;
 	}
 
-	const sharedAddresses = ((c.env.SHARED_MAILBOX_ADDRESSES ?? []) as string[]).map((a) =>
-		a.toLowerCase(),
-	);
+	const sharedAddresses = parseAddressList(c.env.SHARED_MAILBOX_ADDRESSES);
 	const mine = { id: userEmail, email: userEmail, name: userEmail.split("@")[0] || userEmail, type: "private" as const };
 	const shared = sharedAddresses
 		.filter((addr) => addr !== userEmail)
@@ -148,8 +146,8 @@ app.get("/api/v1/mailboxes", async (c) => {
 app.post("/api/v1/mailboxes", async (c) => {
 	const { name, settings, email: rawEmail } = CreateMailboxBody.parse(await c.req.json());
 	const email = rawEmail.toLowerCase();
-	const allowedAddresses = (c.env.EMAIL_ADDRESSES ?? []) as string[];
-	if (allowedAddresses.length > 0 && !allowedAddresses.map((a) => a.toLowerCase()).includes(email)) {
+	const allowedAddresses = parseAddressList(c.env.EMAIL_ADDRESSES);
+	if (allowedAddresses.length > 0 && !allowedAddresses.includes(email)) {
 		return c.json({ error: "Mailbox creation is restricted to configured EMAIL_ADDRESSES" }, 403);
 	}
 	const key = `mailboxes/${email}.json`;
@@ -402,7 +400,7 @@ async function receiveEmail(event: InboundEmailMessage, env: Env, ctx: Execution
 
 	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) throw new Error("received email with empty to");
 
-	const allowedAddresses = ((env.EMAIL_ADDRESSES ?? []) as string[]).map((a) => a.toLowerCase());
+	const allowedAddresses = parseAddressList(env.EMAIL_ADDRESSES);
 	const allRecipients = parsedEmail.to.map((t) => t.address?.toLowerCase()).filter(Boolean) as string[];
 	const ccRecipients = (parsedEmail.cc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];
 	const bccRecipients = (parsedEmail.bcc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];

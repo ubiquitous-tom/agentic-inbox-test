@@ -14,6 +14,18 @@ import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { formatQuotedDate } from "../../shared/dates";
 
+/**
+ * Parse a comma-separated address list var/secret into normalized, lowercase
+ * addresses. Used for EMAIL_ADDRESSES and SHARED_MAILBOX_ADDRESSES, which are
+ * plain strings (not arrays) since they're stored as secrets.
+ */
+export function parseAddressList(raw: string | undefined): string[] {
+	return (raw ?? "")
+		.split(",")
+		.map((a) => a.trim().toLowerCase())
+		.filter(Boolean);
+}
+
 // ── DO Stub ────────────────────────────────────────────────────────
 
 /**
