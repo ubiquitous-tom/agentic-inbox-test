@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { routeAgentRequest } from "agents";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
@@ -42,8 +42,10 @@ function getAccessUrls(teamDomain: string) {
 // Main app that wraps the API and adds React Router fallback
 const app = new Hono<{ Bindings: Env }>();
 
-// Cloudflare Access JWT validation middleware (production only)
-app.use("*", async (c, next) => {
+// Cloudflare Access JWT validation middleware (production only). Scoped to
+// the admin area only — regular users authenticate via the session-cookie
+// system in workers/routes/auth.ts instead (see workers/lib/identity.ts).
+const requireAccessJwt = async (c: Context<{ Bindings: Env }>, next: () => Promise<void>) => {
 	// Skip validation in development
 	if (import.meta.env.DEV) {
 		return next();
@@ -75,10 +77,12 @@ app.use("*", async (c, next) => {
 		return c.text("Invalid or expired Access token", 403);
 	}
 
-	// Authorization model note: once a teammate passes the shared Cloudflare
-	// Access policy, they can access all mailboxes in this app by design.
 	return next();
-});
+};
+
+app.use("/admin", requireAccessJwt);
+app.use("/admin/*", requireAccessJwt);
+app.use("/api/v1/admin/*", requireAccessJwt);
 
 // MCP server endpoint — used by AI coding tools (ProtoAgent, Claude Code, Cursor, etc.)
 // Must be before API routes and React Router catch-all
@@ -111,7 +115,7 @@ app.all("*", (c) => {
 export default {
 	fetch: app.fetch,
 	async email(
-		event: { raw: ReadableStream; rawSize: number },
+		event: { raw: ReadableStream; rawSize: number; forward(rcptTo: string, headers?: Headers): Promise<void> },
 		env: Env,
 		ctx: ExecutionContext,
 	) {

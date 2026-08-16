@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
+import { Badge, Button, Input, Loader, Switch, useKumoToastManager } from "@cloudflare/kumo";
 import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
@@ -20,12 +20,18 @@ export default function SettingsRoute() {
 
 	const [displayName, setDisplayName] = useState("");
 	const [agentPrompt, setAgentPrompt] = useState("");
+	const [forwardingEnabled, setForwardingEnabled] = useState(false);
+	const [forwardingEmail, setForwardingEmail] = useState("");
+	const [agentPanelDefaultOpen, setAgentPanelDefaultOpen] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
 
 	useEffect(() => {
 		if (mailbox) {
 			setDisplayName(mailbox.settings?.fromName || mailbox.name || "");
 			setAgentPrompt(mailbox.settings?.agentSystemPrompt || "");
+			setForwardingEnabled(mailbox.settings?.forwarding?.enabled || false);
+			setForwardingEmail(mailbox.settings?.forwarding?.email || "");
+			setAgentPanelDefaultOpen(mailbox.settings?.agentPanelDefaultOpen ?? true);
 		}
 	}, [mailbox]);
 
@@ -36,6 +42,8 @@ export default function SettingsRoute() {
 			...mailbox.settings,
 			fromName: displayName,
 			agentSystemPrompt: agentPrompt.trim() || undefined,
+			forwarding: { enabled: forwardingEnabled, email: forwardingEmail.trim() },
+			agentPanelDefaultOpen,
 		};
 		try {
 			await updateMailboxMutation.mutateAsync({ mailboxId, settings });
@@ -84,6 +92,28 @@ export default function SettingsRoute() {
 					</div>
 				</div>
 
+				{/* Forwarding */}
+				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
+					<div className="text-sm font-medium text-kumo-default mb-4">
+						Forwarding
+					</div>
+					<div className="space-y-3">
+						<Switch
+							label="Forward a copy of every incoming email"
+							checked={forwardingEnabled}
+							onCheckedChange={setForwardingEnabled}
+						/>
+						<Input
+							label="Forward to"
+							type="email"
+							placeholder="someone@example.com"
+							value={forwardingEmail}
+							onChange={(e) => setForwardingEmail(e.target.value)}
+							disabled={!forwardingEnabled}
+						/>
+					</div>
+				</div>
+
 				{/* Agent System Prompt */}
 				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
 					<div className="flex items-center justify-between mb-4">
@@ -109,6 +139,12 @@ export default function SettingsRoute() {
 							</Button>
 						)}
 					</div>
+					<Switch
+						label="Open agent panel automatically"
+						checked={agentPanelDefaultOpen}
+						onCheckedChange={setAgentPanelDefaultOpen}
+						className="mb-3"
+					/>
 					<p className="text-xs text-kumo-subtle mb-3">
 						Customize how the AI agent behaves for this mailbox.
 						Leave empty to use the built-in default prompt.

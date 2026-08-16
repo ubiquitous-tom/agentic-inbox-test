@@ -89,6 +89,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				/>
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<title>Agentic Inbox</title>
+				{/* Applied before first paint to avoid a light/dark flash on load. */}
+				<script
+					// biome-ignore lint: inline bootstrap script, no user input involved
+					dangerouslySetInnerHTML={{
+						__html:
+							"(function(){try{var m=localStorage.getItem('theme');var d=m==='dark'||(m!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.setAttribute('data-mode','dark');}catch(e){}})();",
+					}}
+				/>
 				<Meta />
 				<Links />
 			</head>

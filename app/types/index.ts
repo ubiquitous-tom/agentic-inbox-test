@@ -14,6 +14,8 @@ export interface MailboxSettings {
 	signature?: SignatureSettings;
 	autoReply?: { enabled: boolean; subject: string; message: string };
 	agentSystemPrompt?: string;
+	/** Whether the AI agent panel opens automatically on this mailbox. Defaults to true when unset. */
+	agentPanelDefaultOpen?: boolean;
 }
 
 export interface Mailbox {
@@ -21,6 +23,8 @@ export interface Mailbox {
 	email: string;
 	name: string;
 	settings?: MailboxSettings;
+	/** Present on list responses: the caller's own mailbox vs. a shared team mailbox. */
+	type?: "private" | "shared";
 }
 
 export interface Email {

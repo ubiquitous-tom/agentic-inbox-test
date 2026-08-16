@@ -14,14 +14,16 @@ import { useUIStore } from "~/hooks/useUIStore";
 export default function MailboxRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
 	// Prefetch mailbox data for child components
-	useMailbox(mailboxId);
+	const { data: mailbox } = useMailbox(mailboxId);
 	const prevMailboxIdRef = useRef<string | undefined>(undefined);
+	const appliedAgentDefaultForRef = useRef<string | undefined>(undefined);
 	const {
 		isSidebarOpen,
 		closeSidebar,
 		isAgentPanelOpen,
 		closePanel,
 		closeComposeModal,
+		setAgentPanelOpen,
 	} = useUIStore();
 
 	useEffect(() => {
@@ -37,6 +39,16 @@ export default function MailboxRoute() {
 
 		prevMailboxIdRef.current = mailboxId;
 	}, [mailboxId, closeComposeModal, closePanel, closeSidebar]);
+
+	// Apply this mailbox's "open agent panel automatically" preference once per
+	// mailbox — but don't re-force it on every settings refetch, so a manual
+	// toggle mid-session sticks until the user switches mailboxes.
+	useEffect(() => {
+		if (mailbox && mailboxId && appliedAgentDefaultForRef.current !== mailboxId) {
+			appliedAgentDefaultForRef.current = mailboxId;
+			setAgentPanelOpen(mailbox.settings?.agentPanelDefaultOpen ?? true);
+		}
+	}, [mailbox, mailboxId, setAgentPanelOpen]);
 
 	return (
 		<div className="flex h-screen overflow-hidden">

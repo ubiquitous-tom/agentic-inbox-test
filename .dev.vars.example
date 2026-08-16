@@ -1,3 +1,36 @@
 # Cloudflare Access (required in production). TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 POLICY_AUD=your-access-policy-audience-tag
 TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+
+# Local dev only: Access validation is skipped in dev, so this simulates the
+# logged-in user's email (normally read from Cf-Access-Authenticated-User-Email).
+DEV_USER_EMAIL=alice@yourdomain.com
+
+# Signing key for regular-user session cookies. Any long random string; rotate
+# by changing it (invalidates all existing sessions). In production, set via
+# `wrangler secret put SESSION_SECRET` — do not commit the real value.
+SESSION_SECRET=change-me-to-a-long-random-string
+
+# The only identity allowed to reach /api/v1/admin/*. In production, set via
+# `wrangler secret put ADMIN_EMAIL` — do not commit the real value.
+ADMIN_EMAIL=admin@yourdomain.com
+
+# Forward address for mail to a mailbox with no provisioned account yet. In
+# production, set via `wrangler secret put MASTER_NOTIFICATION_EMAIL` — do not
+# commit the real value.
+MASTER_NOTIFICATION_EMAIL=you@example.com
+
+# Comma-separated domain(s) this Worker sends/receives mail for. Not sensitive
+# on its own (it's your public domain), but kept as a secret alongside the
+# others for consistency. In production, set via `wrangler secret put DOMAINS`.
+DOMAINS=yourdomain.com
+
+# Comma-separated allow-list restricting which addresses can be provisioned via
+# POST /api/v1/mailboxes and which recipients receiveEmail() will accept. Empty
+# = unrestricted. In production, set via `wrangler secret put EMAIL_ADDRESSES`.
+EMAIL_ADDRESSES=
+
+# Comma-separated shared/team mailbox addresses, visible to every
+# authenticated user in addition to their own private mailbox. In production,
+# set via `wrangler secret put SHARED_MAILBOX_ADDRESSES`.
+SHARED_MAILBOX_ADDRESSES=

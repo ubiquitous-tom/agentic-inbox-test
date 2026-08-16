@@ -14,6 +14,18 @@ import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
 import { formatQuotedDate } from "../../shared/dates";
 
+/**
+ * Parse a comma-separated address list var/secret into normalized, lowercase
+ * addresses. Used for EMAIL_ADDRESSES and SHARED_MAILBOX_ADDRESSES, which are
+ * plain strings (not arrays) since they're stored as secrets.
+ */
+export function parseAddressList(raw: string | undefined): string[] {
+	return (raw ?? "")
+		.split(",")
+		.map((a) => a.trim().toLowerCase())
+		.filter(Boolean);
+}
+
 // ── DO Stub ────────────────────────────────────────────────────────
 
 /**
@@ -42,6 +54,43 @@ export async function listMailboxes(
 		const id = obj.key.replace("mailboxes/", "").replace(".json", "");
 		return { id, email: id };
 	});
+}
+
+/**
+ * Auth data for mailboxes created through the admin-provisioning flow
+ * (see workers/routes/admin.ts and workers/routes/auth.ts). Absent on
+ * mailboxes created through the older Access-only flows.
+ */
+export interface MailboxAuth {
+	recoveryEmail: string;
+	passwordHash: string | null;
+	pendingToken: string | null;
+	pendingTokenExpiresAt: string | null;
+}
+
+export interface MailboxSettings {
+	fromName?: string;
+	forwarding?: { enabled: boolean; email: string };
+	signature?: { enabled: boolean; text: string };
+	autoReply?: { enabled: boolean; subject: string; message: string };
+	agentSystemPrompt?: string;
+	/** Whether the AI agent panel opens automatically on this mailbox. Defaults to true when unset. */
+	agentPanelDefaultOpen?: boolean;
+	auth?: MailboxAuth;
+}
+
+/**
+ * Default settings blob written when a mailbox is first provisioned, either
+ * via explicit creation (POST /api/v1/mailboxes) or lazily on first
+ * authorized access (see `requireMailbox`).
+ */
+export function defaultMailboxSettings(fromName: string): MailboxSettings {
+	return {
+		fromName,
+		forwarding: { enabled: false, email: "" },
+		signature: { enabled: false, text: "" },
+		autoReply: { enabled: false, subject: "", message: "" },
+	};
 }
 
 // ── Sender Validation ──────────────────────────────────────────────
