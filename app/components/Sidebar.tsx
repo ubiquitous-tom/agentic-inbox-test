@@ -11,6 +11,7 @@ import {
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
 	PlusIcon,
+	SignOutIcon,
 	TrashIcon,
 	TrayIcon,
 } from "@phosphor-icons/react";
@@ -20,6 +21,7 @@ import { Folders, SYSTEM_FOLDER_IDS } from "shared/folders";
 import { useCreateFolder, useFolders } from "~/queries/folders";
 import { useMailbox, useMailboxes } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
+import api from "~/services/api";
 
 const FOLDER_ICONS: Record<string, React.ReactNode> = {
 	[Folders.INBOX]: <TrayIcon size={18} weight="regular" />,
@@ -121,21 +123,28 @@ export default function Sidebar() {
 		closeSidebar();
 	};
 
+	const handleLogout = async () => {
+		await api.logout().catch(() => {});
+		navigate("/login");
+	};
+
 	return (
 		<aside className="h-full w-64 bg-kumo-recessed flex flex-col shrink-0 border-r border-kumo-line">
 			{/* Back + identity */}
 			<div className="px-4 pt-4 pb-1">
-				<button
-					type="button"
-					onClick={() => {
-						navigate("/");
-						closeSidebar();
-					}}
-					className="flex items-center gap-1.5 text-kumo-subtle text-sm hover:text-kumo-default transition-colors mb-2.5 cursor-pointer bg-transparent border-0 p-0"
-				>
-					<CaretLeftIcon size={14} />
-					<span>Mailboxes</span>
-				</button>
+				{mailboxes.length > 1 && (
+					<button
+						type="button"
+						onClick={() => {
+							navigate("/");
+							closeSidebar();
+						}}
+						className="flex items-center gap-1.5 text-kumo-subtle text-sm hover:text-kumo-default transition-colors mb-2.5 cursor-pointer bg-transparent border-0 p-0"
+					>
+						<CaretLeftIcon size={14} />
+						<span>Mailboxes</span>
+					</button>
+				)}
 				<div className="px-1">
 					<div className="text-base font-semibold text-kumo-default truncate">
 						{displayName}
@@ -245,6 +254,18 @@ export default function Sidebar() {
 					</div>
 				)}
 			</nav>
+
+			{/* Log out */}
+			<div className="px-3 py-3 border-t border-kumo-line">
+				<Button
+					variant="ghost"
+					icon={<SignOutIcon size={16} />}
+					onClick={handleLogout}
+					className="w-full justify-start"
+				>
+					Log out
+				</Button>
+			</div>
 
 			{/* Create folder dialog */}
 			<Dialog.Root

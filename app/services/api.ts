@@ -42,6 +42,17 @@ async function request<T>(
 
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
+			// A 403 on a mailbox route means there's no valid session — bounce to
+			// login rather than leaving the UI stuck on failed requests. Auth/admin
+			// routes report their own 401/403s for bad credentials, not this.
+			if (
+				res.status === 403 &&
+				url.startsWith("/api/v1/mailboxes") &&
+				typeof window !== "undefined" &&
+				window.location.pathname !== "/login"
+			) {
+				window.location.href = "/login";
+			}
 			throw new ApiError(res.status, body as Record<string, unknown>);
 		}
 
@@ -160,6 +171,37 @@ const api = {
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>
 		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/search`, { params }),
+
+	// Auth (regular users)
+	login: (email: string, password: string) =>
+		post<{ email: string }>("/api/v1/auth/login", { email, password }),
+	activate: (email: string, token: string, password: string) =>
+		post<{ email: string }>("/api/v1/auth/activate", { email, token, password }),
+	requestPasswordReset: (email: string) =>
+		post<{ status: string }>("/api/v1/auth/request-reset", { email }),
+	resetPassword: (email: string, token: string, password: string) =>
+		post<{ email: string }>("/api/v1/auth/reset-password", { email, token, password }),
+	logout: () => post<void>("/api/v1/auth/logout"),
+
+	// Admin
+	adminListMailboxes: () =>
+		get<{ id: string; email: string; recoveryEmail: string | null; activated: boolean }[]>(
+			"/api/v1/admin/mailboxes",
+		),
+	adminCreateMailbox: (email: string, recoveryEmail: string, name?: string) =>
+		post<{ id: string; email: string; recoveryEmail: string; activated: boolean }>(
+			"/api/v1/admin/mailboxes",
+			{ email, recoveryEmail, name },
+		),
+	adminDeleteMailbox: (email: string) =>
+		del<void>(`/api/v1/admin/mailboxes/${encodeURIComponent(email)}`),
+	adminResetPassword: (email: string) =>
+		post<{ status: string }>(`/api/v1/admin/mailboxes/${encodeURIComponent(email)}/reset-password`),
+	adminChangeRecoveryEmail: (email: string, recoveryEmail: string) =>
+		put<{ id: string; recoveryEmail: string }>(
+			`/api/v1/admin/mailboxes/${encodeURIComponent(email)}/recovery-email`,
+			{ recoveryEmail },
+		),
 };
 
 export default api;

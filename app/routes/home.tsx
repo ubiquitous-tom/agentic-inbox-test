@@ -4,7 +4,8 @@
 
 import { Loader } from "@cloudflare/kumo";
 import { EnvelopeIcon, UsersIcon } from "@phosphor-icons/react";
-import { Link as RouterLink } from "react-router";
+import { useEffect } from "react";
+import { Link as RouterLink, useNavigate } from "react-router";
 import { useMailboxes } from "~/queries/mailboxes";
 import type { Mailbox } from "~/types";
 
@@ -34,10 +35,23 @@ function MailboxRow({ account, isFirst }: { account: Mailbox; isFirst: boolean }
 }
 
 export default function HomeRoute() {
+	const navigate = useNavigate();
 	const { data: mailboxes = [], isFetched } = useMailboxes();
 
 	const mine = mailboxes.find((m) => m.type === "private");
 	const shared = mailboxes.filter((m) => m.type === "shared");
+
+	// With only one mailbox (the common case), this picker just adds an extra
+	// click — skip straight to it instead of showing a list of one.
+	useEffect(() => {
+		if (isFetched && mailboxes.length === 1) {
+			navigate(`/mailbox/${mailboxes[0].id}`, { replace: true });
+		}
+	}, [isFetched, mailboxes, navigate]);
+
+	if (isFetched && mailboxes.length === 1) {
+		return null;
+	}
 
 	return (
 		<div className="min-h-screen bg-kumo-recessed">

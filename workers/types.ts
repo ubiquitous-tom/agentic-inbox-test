@@ -7,4 +7,6 @@ export interface Env extends Cloudflare.Env {
 	TEAM_DOMAIN: string;
 	/** Dev-only: simulated authenticated user email, since Access validation is skipped in local dev. */
 	DEV_USER_EMAIL: string;
+	/** HMAC signing key for regular-user session cookies. Set via `wrangler secret put`. */
+	SESSION_SECRET: string;
 }

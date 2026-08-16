@@ -36,6 +36,7 @@ interface UIState {
 	// Agent panel
 	isAgentPanelOpen: boolean;
 	toggleAgentPanel: () => void;
+	setAgentPanelOpen: (open: boolean) => void;
 
 	// Legacy dialog support (kept for non-split views)
 	isComposeModalOpen: boolean;
@@ -83,6 +84,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 	toggleSidebar: () => set({ isSidebarOpen: !get().isSidebarOpen }),
 
 	toggleAgentPanel: () => set({ isAgentPanelOpen: !get().isAgentPanelOpen }),
+	setAgentPanelOpen: (open) => set({ isAgentPanelOpen: open }),
 
 	openComposeModal: (options) =>
 		set({

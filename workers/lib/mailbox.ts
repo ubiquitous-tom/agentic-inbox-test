@@ -29,7 +29,7 @@ export const requireMailbox = createMiddleware<MailboxContext>(async (c, next) =
 
 	let userEmail: string;
 	try {
-		userEmail = getAuthenticatedUserEmail(c);
+		userEmail = await getAuthenticatedUserEmail(c);
 	} catch (e) {
 		if (e instanceof IdentityError) return c.json({ error: e.message }, 403);
 		throw e;

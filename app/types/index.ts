@@ -14,6 +14,8 @@ export interface MailboxSettings {
 	signature?: SignatureSettings;
 	autoReply?: { enabled: boolean; subject: string; message: string };
 	agentSystemPrompt?: string;
+	/** Whether the AI agent panel opens automatically on this mailbox. Defaults to true when unset. */
+	agentPanelDefaultOpen?: boolean;
 }
 
 export interface Mailbox {

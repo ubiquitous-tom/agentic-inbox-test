@@ -5,3 +5,8 @@ TEAM_DOMAIN=https://your-team.cloudflareaccess.com
 # Local dev only: Access validation is skipped in dev, so this simulates the
 # logged-in user's email (normally read from Cf-Access-Authenticated-User-Email).
 DEV_USER_EMAIL=alice@yourdomain.com
+
+# Signing key for regular-user session cookies. Any long random string; rotate
+# by changing it (invalidates all existing sessions). In production, set via
+# `wrangler secret put SESSION_SECRET` — do not commit the real value.
+SESSION_SECRET=change-me-to-a-long-random-string

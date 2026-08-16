@@ -9,6 +9,14 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"workers_dev": true,
+	"routes": [
+		{
+			"pattern": "mail.cumuluselements.com",
+			"custom_domain": true,
+			"zone_name": "cumuluselements.com"
+		}
+	],
 	"vars": {
 		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
 		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
@@ -17,7 +25,15 @@
 		"EMAIL_ADDRESSES": [],
 		// Shared/team mailbox addresses — every Access-authenticated user can view
 		// these in addition to their own private mailbox (their login email).
-		"SHARED_MAILBOX_ADDRESSES": []
+		"SHARED_MAILBOX_ADDRESSES": [],
+		// Inbound mail for an address with no provisioned mailbox yet is forwarded
+		// here instead of being dropped, so a login code for a brand-new address
+		// can be relayed to its owner. Must be a verified Email Routing destination
+		// address. Established mailboxes are never forwarded — only unclaimed ones.
+		"MASTER_NOTIFICATION_EMAIL": "omnipresent.tom@gmail.com",
+		// The only identity allowed to reach /api/v1/admin/* — must match the
+		// email Cloudflare Access authenticates the admin as.
+		"ADMIN_EMAIL": "omnipresent_tom@hotmail.com"
 	},
 	"send_email": [
 		{

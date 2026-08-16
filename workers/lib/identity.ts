@@ -6,8 +6,15 @@
  * Resolves which authenticated user is making the current request, used to
  * scope mailbox access to that user's own address plus configured shared
  * mailboxes (see `requireMailbox` in ./mailbox.ts).
+ *
+ * Two independent identity sources exist: the admin reaches /api/v1/admin/*
+ * via Cloudflare Access (see workers/app.ts); everyone else authenticates via
+ * the session cookie issued by workers/routes/auth.ts. A request carries at
+ * most one of these in practice, since Access and the cookie-based routes
+ * cover disjoint paths.
  */
 import type { Env } from "../types";
+import { verifySession } from "./auth";
 
 export class IdentityError extends Error {
 	constructor(message: string) {
@@ -26,16 +33,27 @@ interface RequestContext {
 	env: Env;
 }
 
+function extractCookieValue(cookieHeader: string | undefined, name: string): string | undefined {
+	if (!cookieHeader) return undefined;
+	const match = cookieHeader.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+	return match ? decodeURIComponent(match[1]) : undefined;
+}
+
 /**
  * Resolve the authenticated user's email for the current request.
  *
- * In production, Cloudflare Access only forwards requests to the origin after
+ * Checks the regular-user session cookie first. Falls back to Cloudflare
+ * Access: in production, Access only forwards requests to the origin after
  * enforcing its policy, and attaches this header itself — it is trusted here
- * because the JWT gate in workers/app.ts already rejects any request that
- * bypassed Access. In local dev, Access is skipped entirely, so DEV_USER_EMAIL
- * simulates the logged-in identity.
+ * because the JWT gate in workers/app.ts already rejects any admin request
+ * that bypassed Access. In local dev, Access is skipped entirely, so
+ * DEV_USER_EMAIL simulates the logged-in identity.
  */
-export function getAuthenticatedUserEmail(c: RequestContext): string {
+export async function getAuthenticatedUserEmail(c: RequestContext): Promise<string> {
+	const cookieValue = extractCookieValue(c.req.header("cookie"), "session");
+	const sessionEmail = await verifySession(c.env, cookieValue);
+	if (sessionEmail) return sessionEmail;
+
 	if (import.meta.env.DEV) {
 		const devEmail = c.env.DEV_USER_EMAIL;
 		if (!devEmail) {
