@@ -8,6 +8,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { authenticateMcpRequest } from "./lib/mcp-auth";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
@@ -85,14 +86,19 @@ app.use("/admin/*", requireAccessJwt);
 app.use("/api/v1/admin/*", requireAccessJwt);
 
 // MCP server endpoint — used by AI coding tools (ProtoAgent, Claude Code, Cursor, etc.)
-// Must be before API routes and React Router catch-all
+// Must be before API routes and React Router catch-all. Each request is
+// authenticated with a per-mailbox bearer token (see workers/lib/mcp-auth.ts);
+// the resolved identity is passed into the EmailMCP Durable Object via
+// `ctx.props`, which the Agents SDK reads on every `mcpHandler.fetch()` call.
 const mcpHandler = EmailMCP.serve("/mcp", { binding: "EMAIL_MCP" });
-app.all("/mcp", async (c) => {
+async function handleMcpRequest(c: Context<{ Bindings: Env }>) {
+	const auth = await authenticateMcpRequest(c);
+	if (auth instanceof Response) return auth;
+	(c.executionCtx as unknown as { props: typeof auth }).props = auth;
 	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
-});
-app.all("/mcp/*", async (c) => {
-	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
-});
+}
+app.all("/mcp", handleMcpRequest);
+app.all("/mcp/*", handleMcpRequest);
 
 // Mount the API routes
 app.route("/", apiApp);

@@ -120,6 +120,10 @@ const api = {
 		put<Mailbox>(`/api/v1/mailboxes/${mailboxId}`, { settings }),
 	deleteMailbox: (mailboxId: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}`),
+	generateMcpToken: (mailboxId: string) =>
+		post<{ token: string }>(`/api/v1/mailboxes/${mailboxId}/mcp-token`),
+	revokeMcpToken: (mailboxId: string) =>
+		del<void>(`/api/v1/mailboxes/${mailboxId}/mcp-token`),
 
 	// Emails
 	listEmails: (mailboxId: string, params: Record<string, string>, opts?: { signal?: AbortSignal }) =>

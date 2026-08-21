@@ -8,6 +8,7 @@ import PostalMime from "postal-mime";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
 import { storeAttachments, type StoredAttachment } from "./lib/attachments";
+import { generateToken, hashToken } from "./lib/auth";
 import {
 	validateSender,
 	SenderValidationError,
@@ -180,6 +181,32 @@ app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
 	const key = `mailboxes/${mailboxId}.json`;
 	if (!(await c.env.BUCKET.head(key))) return c.json({ error: "Not found" }, 404);
 	await c.env.BUCKET.delete(key); // TODO: also delete DO data and R2 attachment blobs
+	return c.body(null, 204);
+});
+
+// -- MCP access token (self-service, see workers/lib/mcp-auth.ts) ---
+
+app.post("/api/v1/mailboxes/:mailboxId/mcp-token", async (c) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const key = `mailboxes/${mailboxId}.json`;
+	const obj = await c.env.BUCKET.get(key);
+	if (!obj) return c.json({ error: "Not found" }, 404);
+	const settings = (await obj.json()) as MailboxSettings;
+	const token = generateToken();
+	settings.mcp = { tokenHash: await hashToken(token) };
+	await c.env.BUCKET.put(key, JSON.stringify(settings));
+	// The raw token is only ever returned here — only its hash is persisted.
+	return c.json({ token });
+});
+
+app.delete("/api/v1/mailboxes/:mailboxId/mcp-token", async (c) => {
+	const mailboxId = c.req.param("mailboxId")!;
+	const key = `mailboxes/${mailboxId}.json`;
+	const obj = await c.env.BUCKET.get(key);
+	if (!obj) return c.json({ error: "Not found" }, 404);
+	const settings = (await obj.json()) as MailboxSettings;
+	settings.mcp = { tokenHash: null };
+	await c.env.BUCKET.put(key, JSON.stringify(settings));
 	return c.body(null, 204);
 });
 

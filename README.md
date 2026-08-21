@@ -27,6 +27,10 @@ This fork diverges from the upstream template in a few important ways:
   mailbox accounts. See [Admin panel](#admin-panel).
 - **Per-mailbox email forwarding**, dark mode, and a per-mailbox "open agent
   panel automatically" setting. See [Other settings](#other-settings).
+- **A third, MCP-specific auth mechanism.** The `/mcp` endpoint (for Claude
+  Code, Cursor, etc.) uses a self-service per-mailbox bearer token — not
+  Access, not the session cookie. Off by default. See
+  [MCP access](#mcp-access).
 - **Deploy is domain-agnostic.** `wrangler.jsonc` no longer hardcodes a
   domain or business-specific values — the same codebase can be deployed to
   more than one personal domain. See
@@ -127,7 +131,7 @@ with no flash-of-wrong-theme on load (`app/hooks/useTheme.ts`).
 - **Frontend:** React 19, React Router v7, Tailwind CSS, Zustand, TipTap, `@cloudflare/kumo`
 - **Backend:** Hono, Cloudflare Workers, Durable Objects (SQLite), R2, Email Routing
 - **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, Workers AI (`@cf/moonshotai/kimi-k2.5`), `react-markdown` + `remark-gfm`
-- **Auth:** Cloudflare Access JWT validation for `/admin` (required outside local development); self-service PBKDF2 + HMAC-signed session cookies for regular mailbox users
+- **Auth:** Cloudflare Access JWT validation for `/admin` (required outside local development); self-service PBKDF2 + HMAC-signed session cookies for regular mailbox users; per-mailbox bearer tokens for MCP clients
 
 ## Getting Started
 
@@ -209,7 +213,15 @@ Each additional domain is a **fully separate Worker deployment** — its own Wor
 - [Workers AI](https://developers.cloudflare.com/workers-ai/) enabled (for the agent)
 - [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) configured (required in production, but only gates `/admin` — see [Authentication](#authentication))
 
-The MCP server at `/mcp` is unauthenticated by the per-mailbox model above — external AI tools (Claude Code, Cursor, etc.) connected via MCP can still operate on any mailbox by passing a `mailboxId` parameter, the same as before this fork's authorization changes. Treat `/mcp` as trusted-network-only, or don't expose it, until it's wired into the same per-user authorization checks as the HTTP API.
+### MCP access
+
+The MCP server at `/mcp` (for connecting Claude Code, Claude Desktop, Cursor, etc. to a mailbox) uses its own third auth mechanism, separate from both Access and the session cookie — a per-mailbox bearer token, since MCP clients don't carry a browser cookie jar:
+
+1. From a mailbox's Settings page, click "Generate token" under MCP access. The raw token is shown once — copy it.
+2. Configure your MCP client with the URL `https://yourdomain.com/mcp` plus two headers: `Authorization: Bearer <token>` and `X-Mailbox-Id: <that mailbox's address>`.
+3. That token authorizes exactly that mailbox plus any shared mailboxes — the same scope the mailbox owner has on the web. `mailboxId` is optional on every tool call and defaults to the mailbox the token belongs to, so most prompts ("check my inbox") never need to mention an address at all.
+
+No token exists until you generate one, so an unauthenticated request to `/mcp` gets a 401 by default — there's no separate on/off flag, the token's presence *is* the switch. Revoking (also in Settings) invalidates it immediately, the same way deleting a mailbox immediately invalidates its session cookie.
 
 ## Architecture
 

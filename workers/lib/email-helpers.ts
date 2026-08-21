@@ -77,6 +77,8 @@ export interface MailboxSettings {
 	/** Whether the AI agent panel opens automatically on this mailbox. Defaults to true when unset. */
 	agentPanelDefaultOpen?: boolean;
 	auth?: MailboxAuth;
+	/** Self-service MCP bearer token for this mailbox (see workers/lib/mcp-auth.ts). Absent/null = MCP access disabled. */
+	mcp?: { tokenHash: string | null };
 }
 
 /**

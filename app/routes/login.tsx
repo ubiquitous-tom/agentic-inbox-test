@@ -39,7 +39,7 @@ export default function LoginRoute() {
 				<ThemeToggle />
 			</div>
 			<div className="w-full max-w-sm rounded-xl border border-kumo-line bg-kumo-base p-6">
-				<h1 className="text-xl font-bold text-kumo-default mb-5">Log in</h1>
+				<h1 className="text-xl font-bold text-kumo-default mb-5 text-center">Log in</h1>
 				<form onSubmit={handleSubmit} className="space-y-4">
 					{error && <Text variant="error" size="sm">{error}</Text>}
 					<Input
@@ -56,7 +56,7 @@ export default function LoginRoute() {
 						onChange={(e) => setPassword(e.target.value)}
 						required
 					/>
-					<Button type="submit" variant="primary" className="w-full" loading={isSubmitting}>
+					<Button type="submit" variant="primary" className="w-full justify-center" loading={isSubmitting}>
 						Log in
 					</Button>
 				</form>

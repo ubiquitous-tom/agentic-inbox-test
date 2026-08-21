@@ -53,9 +53,24 @@ export async function verifyPassword(password: string, stored: string): Promise<
 	return timingSafeEqual(toBase64Url(new Uint8Array(bits)), expected);
 }
 
-/** Random token used for both activation links and password-reset links. */
+/** Random token used for activation links, password-reset links, and MCP bearer tokens. */
 export function generateToken(): string {
 	return toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+/**
+ * One-way hash for high-entropy tokens (MCP bearer tokens). Unlike passwords,
+ * these are already 256 bits of randomness, so a plain fast hash — no salt,
+ * no PBKDF2 iterations — is standard practice (same approach GitHub/Stripe
+ * use for API key storage).
+ */
+export async function hashToken(token: string): Promise<string> {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+	return toBase64Url(new Uint8Array(digest));
+}
+
+export async function verifyToken(token: string, storedHash: string): Promise<boolean> {
+	return timingSafeEqual(await hashToken(token), storedHash);
 }
 
 async function hmac(secret: string, data: string): Promise<string> {

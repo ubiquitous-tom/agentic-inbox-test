@@ -16,6 +16,8 @@ export interface MailboxSettings {
 	agentSystemPrompt?: string;
 	/** Whether the AI agent panel opens automatically on this mailbox. Defaults to true when unset. */
 	agentPanelDefaultOpen?: boolean;
+	/** Self-service MCP bearer token for this mailbox. Absent/null tokenHash = MCP access disabled. */
+	mcp?: { tokenHash: string | null };
 }
 
 export interface Mailbox {

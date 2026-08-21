@@ -21,7 +21,11 @@ import {
 	toolMoveEmail,
 } from "../lib/tools";
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
+import type { McpAuthProps } from "../lib/mcp-auth";
 import type { Env } from "../types";
+
+const MAILBOX_ID_DESCRIPTION =
+	"The mailbox email address. Optional — defaults to the mailbox this connection is authenticated as. Only needed to target one of your shared mailboxes instead.";
 
 /** Wrap a plain result object into MCP content format. */
 function mcpText(result: unknown) {
@@ -59,9 +63,12 @@ function mcpResult(result: Record<string, unknown>) {
  *
  * Clients (ProtoAgent, Claude Code, Cursor, etc.) connect to the
  * `/mcp` endpoint and can list mailboxes, read/search emails,
- * draft replies, send messages, and manage folders.
+ * draft replies, send messages, and manage folders. Every connection is
+ * authenticated with a per-mailbox bearer token (see
+ * workers/lib/mcp-auth.ts) — `this.props` below is that token's resolved
+ * identity, set by the Agents SDK from `ctx.props` on every request.
  */
-export class EmailMCP extends McpAgent<Env> {
+export class EmailMCP extends McpAgent<Env, unknown, McpAuthProps> {
 	server = new McpServer({
 		name: "agentic-inbox",
 		version: "1.0.0",
@@ -70,11 +77,22 @@ export class EmailMCP extends McpAgent<Env> {
 	async init() {
 		const env = this.env;
 
+		/** Mailboxes this connection's token authorizes: its own + any shared ones. */
+		const authorizedMailboxes = () =>
+			new Set(this.props ? [this.props.mailboxId, ...this.props.sharedAddresses] : []);
+
+		/** Resolve the effective mailboxId — the explicit argument, or this token's own mailbox if omitted. */
+		const resolveMailboxId = (mailboxId?: string): string | null =>
+			(mailboxId || this.props?.mailboxId)?.toLowerCase() || null;
+
 		/**
-		 * Verify a mailbox exists in R2 before operating on it.
-		 * Returns an MCP error response if the mailbox is not found, or null if valid.
+		 * Verify the caller's token authorizes this mailbox, and that it exists.
+		 * Returns an MCP error response if not, or null if valid.
 		 */
 		const verifyMailbox = async (mailboxId: string) => {
+			if (!authorizedMailboxes().has(mailboxId)) {
+				return mcpError(`Mailbox "${mailboxId}" not found. Use list_mailboxes to see available mailboxes.`);
+			}
 			const obj = await env.BUCKET.head(`mailboxes/${mailboxId}.json`);
 			if (!obj) {
 				return mcpError(`Mailbox "${mailboxId}" not found. Use list_mailboxes to see available mailboxes.`);
@@ -85,11 +103,12 @@ export class EmailMCP extends McpAgent<Env> {
 		// ── list_mailboxes ─────────────────────────────────────────
 		this.server.tool(
 			"list_mailboxes",
-			"List all available mailboxes",
+			"List mailboxes this connection is authorized to access (its own mailbox plus any shared ones).",
 			{},
 			async () => {
-				const result = await toolListMailboxes(env);
-				return mcpText(result);
+				const authorized = authorizedMailboxes();
+				const all = await toolListMailboxes(env);
+				return mcpText(all.filter((m) => authorized.has(m.id)));
 			},
 		);
 
@@ -98,9 +117,7 @@ export class EmailMCP extends McpAgent<Env> {
 			"list_emails",
 			"List emails in a mailbox folder. Returns email metadata (id, subject, sender, recipient, date, read/starred status, thread_id).",
 			{
-				mailboxId: z
-					.string()
-					.describe("The mailbox email address (e.g. user@example.com)"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				folder: z
 					.string()
 					.default(Folders.INBOX)
@@ -114,7 +131,9 @@ export class EmailMCP extends McpAgent<Env> {
 					.default(1)
 					.describe("Page number for pagination"),
 			},
-			async ({ mailboxId, folder, limit, page }) => {
+			async ({ mailboxId: rawMailboxId, folder, limit, page }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolListEmails(env, mailboxId, { folder, limit, page });
@@ -127,10 +146,12 @@ export class EmailMCP extends McpAgent<Env> {
 			"get_email",
 			"Get a single email with its full body content. Use this to read the actual content of an email.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				emailId: z.string().describe("The email ID to retrieve"),
 			},
-			async ({ mailboxId, emailId }) => {
+			async ({ mailboxId: rawMailboxId, emailId }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolGetEmail(env, mailboxId, emailId);
@@ -149,12 +170,14 @@ export class EmailMCP extends McpAgent<Env> {
 			"get_thread",
 			"Get all emails in a conversation thread. Returns all messages sorted chronologically.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				threadId: z
 					.string()
 					.describe("The thread_id to retrieve all messages for"),
 			},
-			async ({ mailboxId, threadId }) => {
+			async ({ mailboxId: rawMailboxId, threadId }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolGetThread(env, mailboxId, threadId);
@@ -167,14 +190,16 @@ export class EmailMCP extends McpAgent<Env> {
 			"search_emails",
 			"Search for emails matching a query across subject and body fields.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				query: z.string().describe("Search query to match against subject and body"),
 				folder: z
 					.string()
 					.optional()
 					.describe("Optional folder to restrict search to"),
 			},
-			async ({ mailboxId, query, folder }) => {
+			async ({ mailboxId: rawMailboxId, query, folder }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolSearchEmails(env, mailboxId, { query, folder });
@@ -187,7 +212,7 @@ export class EmailMCP extends McpAgent<Env> {
 			"draft_reply",
 			"Draft a reply to an email and save it to the Drafts folder. Does NOT send — saves a draft for review.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				originalEmailId: z
 					.string()
 					.describe("The ID of the email being replied to"),
@@ -197,7 +222,9 @@ export class EmailMCP extends McpAgent<Env> {
 					.string()
 					.describe("The HTML body of the reply"),
 			},
-			async ({ mailboxId, originalEmailId, to, subject, bodyHtml }) => {
+			async ({ mailboxId: rawMailboxId, originalEmailId, to, subject, bodyHtml }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolDraftReply(env, mailboxId, {
@@ -217,7 +244,7 @@ export class EmailMCP extends McpAgent<Env> {
 			"create_draft",
 			"Create a new draft email. Can be a new email or a reply draft.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				to: z
 					.string()
 					.optional()
@@ -233,7 +260,9 @@ export class EmailMCP extends McpAgent<Env> {
 					.optional()
 					.describe("Thread ID to attach this draft to (optional)"),
 			},
-			async ({ mailboxId, to, subject, bodyHtml, in_reply_to, thread_id }) => {
+			async ({ mailboxId: rawMailboxId, to, subject, bodyHtml, in_reply_to, thread_id }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolDraftEmail(env, mailboxId, {
@@ -263,7 +292,7 @@ export class EmailMCP extends McpAgent<Env> {
 			"update_draft",
 			"Update an existing draft email's content.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				draftId: z.string().describe("The ID of the draft to update"),
 				to: z
 					.string()
@@ -272,7 +301,9 @@ export class EmailMCP extends McpAgent<Env> {
 				subject: z.string().optional().describe("Updated subject line"),
 				bodyHtml: z.string().optional().describe("Updated HTML body"),
 			},
-			async ({ mailboxId, draftId, to, subject, bodyHtml }) => {
+			async ({ mailboxId: rawMailboxId, draftId, to, subject, bodyHtml }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolUpdateDraft(env, mailboxId, {
@@ -299,10 +330,12 @@ export class EmailMCP extends McpAgent<Env> {
 			"delete_email",
 			"Permanently delete an email by ID.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				emailId: z.string().describe("The email ID to delete"),
 			},
-			async ({ mailboxId, emailId }) => {
+			async ({ mailboxId: rawMailboxId, emailId }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolDeleteEmail(env, mailboxId, emailId);
@@ -315,7 +348,7 @@ export class EmailMCP extends McpAgent<Env> {
 			"send_reply",
 			"Send a reply to an email. Only call after drafting and getting confirmation.",
 			{
-				mailboxId: z.string().describe("The mailbox email address to send from"),
+				mailboxId: z.string().optional().describe(`${MAILBOX_ID_DESCRIPTION} This is also the "from" address.`),
 				originalEmailId: z
 					.string()
 					.describe("The ID of the email being replied to"),
@@ -323,7 +356,9 @@ export class EmailMCP extends McpAgent<Env> {
 				subject: z.string().describe("Subject line"),
 				bodyHtml: z.string().describe("The HTML body of the reply"),
 			},
-			async ({ mailboxId, originalEmailId, to, subject, bodyHtml }) => {
+			async ({ mailboxId: rawMailboxId, originalEmailId, to, subject, bodyHtml }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolSendReply(env, mailboxId, {
@@ -357,12 +392,14 @@ export class EmailMCP extends McpAgent<Env> {
 			"send_email",
 			"Send a new email (not a reply). Only call after getting confirmation.",
 			{
-				mailboxId: z.string().describe("The mailbox email address to send from"),
+				mailboxId: z.string().optional().describe(`${MAILBOX_ID_DESCRIPTION} This is also the "from" address.`),
 				to: z.string().email().describe("Recipient email address"),
 				subject: z.string().describe("Subject line"),
 				bodyHtml: z.string().describe("The HTML body of the email"),
 			},
-			async ({ mailboxId, to, subject, bodyHtml }) => {
+			async ({ mailboxId: rawMailboxId, to, subject, bodyHtml }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolSendEmail(env, mailboxId, {
@@ -388,11 +425,13 @@ export class EmailMCP extends McpAgent<Env> {
 			"mark_email_read",
 			"Mark an email as read or unread.",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				emailId: z.string().describe("The email ID"),
 				read: z.boolean().describe("true to mark as read, false for unread"),
 			},
-			async ({ mailboxId, emailId, read }) => {
+			async ({ mailboxId: rawMailboxId, emailId, read }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolMarkEmailRead(env, mailboxId, emailId, read);
@@ -405,13 +444,15 @@ export class EmailMCP extends McpAgent<Env> {
 			"move_email",
 			"Move an email to a different folder (inbox, sent, draft, archive, trash).",
 			{
-				mailboxId: z.string().describe("The mailbox email address"),
+				mailboxId: z.string().optional().describe(MAILBOX_ID_DESCRIPTION),
 				emailId: z.string().describe("The email ID"),
 				folderId: z
 					.string()
 					.describe(MOVE_FOLDER_TOOL_DESCRIPTION),
 			},
-			async ({ mailboxId, emailId, folderId }) => {
+			async ({ mailboxId: rawMailboxId, emailId, folderId }) => {
+				const mailboxId = resolveMailboxId(rawMailboxId);
+				if (!mailboxId) return mcpError("mailboxId is required");
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolMoveEmail(env, mailboxId, emailId, folderId);
