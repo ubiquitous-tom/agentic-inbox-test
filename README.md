@@ -223,6 +223,63 @@ The MCP server at `/mcp` (for connecting Claude Code, Claude Desktop, Cursor, et
 
 No token exists until you generate one, so an unauthenticated request to `/mcp` gets a 401 by default — there's no separate on/off flag, the token's presence *is* the switch. Revoking (also in Settings) invalidates it immediately, the same way deleting a mailbox immediately invalidates its session cookie.
 
+#### Connecting with curl
+
+MCP is JSON-RPC 2.0 over HTTP. A client has to `initialize`, send an
+`initialized` notification, then it can call tools — here's the whole
+handshake by hand (every request needs both auth headers; the session ID
+comes back on the `initialize` response and must be echoed on every
+request after):
+
+```bash
+TOKEN="<paste from Settings>"
+MAILBOX="you@yourdomain.com"
+
+# 1. Initialize — capture the mcp-session-id response header
+curl -i -X POST https://yourdomain.com/mcp \
+  -H "Authorization: Bearer $TOKEN" -H "X-Mailbox-Id: $MAILBOX" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+
+SESSION_ID="<value of the mcp-session-id header above>"
+
+# 2. Required initialized notification
+curl -X POST https://yourdomain.com/mcp \
+  -H "Authorization: Bearer $TOKEN" -H "X-Mailbox-Id: $MAILBOX" -H "mcp-session-id: $SESSION_ID" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+# 3. Call a tool
+curl -X POST https://yourdomain.com/mcp \
+  -H "Authorization: Bearer $TOKEN" -H "X-Mailbox-Id: $MAILBOX" -H "mcp-session-id: $SESSION_ID" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_emails","arguments":{"limit":5}}}'
+```
+
+A real MCP client (Claude Code, Claude Desktop, Cursor) handles all of this for you — you only supply the URL and the two headers.
+
+#### Available tools
+
+`mailboxId` is listed once here since every tool takes it the same way: optional, defaults to the mailbox the token belongs to, only needed to target one of your shared mailboxes instead. Folder values are `inbox`, `sent`, `draft`, `archive`, `trash`.
+
+| Tool | Other arguments | Notes |
+|---|---|---|
+| `list_mailboxes` | — | Returns only what this token authorizes |
+| `list_emails` | `folder` (default `inbox`), `limit` (default 20), `page` (default 1) | |
+| `get_email` | `emailId` (required) | Full body content |
+| `get_thread` | `threadId` (required) | All messages in a conversation |
+| `search_emails` | `query` (required), `folder` (optional) | Matches subject + body |
+| `draft_reply` | `originalEmailId`, `to`, `subject`, `bodyHtml` (all required) | Saves to Drafts, doesn't send |
+| `create_draft` | `to` (optional), `subject`, `bodyHtml` (required), `in_reply_to`, `thread_id` (optional) | New or reply draft |
+| `update_draft` | `draftId` (required), `to`, `subject`, `bodyHtml` (all optional) | |
+| `delete_email` | `emailId` (required) | Permanent |
+| `send_reply` | `originalEmailId`, `to`, `subject`, `bodyHtml` (all required) | Actually sends |
+| `send_email` | `to`, `subject`, `bodyHtml` (all required) | Actually sends, not a reply |
+| `mark_email_read` | `emailId`, `read` (both required) | |
+| `move_email` | `emailId`, `folderId` (both required) | |
+
+`draft_reply`, `create_draft`, `update_draft`, `send_reply`, and `send_email` run the body through a Workers AI sanitize/verify pass (`@cf/meta/llama-4-scout-17b-16e-instruct`) before saving or sending — see [workers/lib/ai.ts](workers/lib/ai.ts).
+
 ## Architecture
 
 ```
